@@ -1,6 +1,6 @@
 /**
  * Programs page showcasing actual ClinicalRxQ training programs pulled from Airtable
- * - Uses Table IDs and Field IDs only (provided).
+ * - Uses table and field names from the new base.
  * - Links to ProgramDetail using a human-readable slug derived from Program Name.
  * - Uses listAllRecords to transparently handle pagination.
  * - Shows subtle skeletons while loading for better UX.
@@ -13,8 +13,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Clock, Users, Star, CheckCircle } from 'lucide-react';
-import { listAllRecords, AirtableRecord, getAttachmentArray } from '../lib/airtable';
-import { FIELD_IDS, TABLE_IDS } from '../config/airtableConfig';
+import { listAllRecords, AirtableRecord } from '../lib/airtable';
 import { slugify } from '../lib/slug';
 import { getSelectText } from '../lib/cellValue';
 import SafeText from '../components/common/SafeText';
@@ -79,111 +78,51 @@ export default function Programs() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  /**
-   * Load programs from Airtable using Field IDs with transparent pagination
-   */
-  useEffect(() => {
-    let mounted = true;
-    async function load() {
-      try {
-        setIsLoading(true);
-        setError('');
+    /**
+     * Load programs from Airtable using table and field names
+     */
+    useEffect(() => {
+      let mounted = true;
+      async function load() {
+        try {
+          setIsLoading(true);
+          setError('');
 
-        // Fetch all program records across pages
-        const records = await listAllRecords<Record<string, any>>({
-          tableId: TABLE_IDS.programs,
-          pageSize: 100,
-          fields: [
-            FIELD_IDS.programs.name,
-            FIELD_IDS.programs.summary,
-            FIELD_IDS.programs.description,
-            FIELD_IDS.programs.level,
-            FIELD_IDS.programs.photo,
-            FIELD_IDS.programs.sortOrder,
-          ],
-        });
+          const records = await listAllRecords<Record<string, any>>({
+            table: 'ClinicalPrograms',
+            pageSize: 100,
+            fields: ['programName', 'programDescription', 'experienceLevel', 'programSlug'],
+          });
 
-        if (!mounted) return;
+          if (!mounted) return;
 
-        const ui: ProgramUIItem[] = records.map((rec: AirtableRecord<Record<string, any>>) => {
-          const title = (rec.fields[FIELD_IDS.programs.name] as string) || 'Untitled Program';
-          const summary = (rec.fields[FIELD_IDS.programs.summary] as string) || '';
-          const description = summary || ((rec.fields[FIELD_IDS.programs.description] as string) || '');
-          const levelRaw = rec.fields[FIELD_IDS.programs.level];
-          const level = getSelectText(levelRaw);
-          const image = getAttachmentArray(rec.fields[FIELD_IDS.programs.photo])[0]?.url;
-          const sortOrderRaw = rec.fields[FIELD_IDS.programs.sortOrder];
-          const sortOrder = typeof sortOrderRaw === 'number' ? sortOrderRaw : Number(sortOrderRaw || 0);
+          const ui: ProgramUIItem[] = records.map((rec: AirtableRecord<Record<string, any>>) => {
+            const title = (rec.fields['programName'] as string) || 'Untitled Program';
+            const description = (rec.fields['programDescription'] as string) || '';
+            const level = getSelectText(rec.fields['experienceLevel']);
+            return {
+              id: rec.id,
+              title,
+              description,
+              level,
+            };
+          });
 
-          return {
-            id: rec.id,
-            title,
-            description,
-            level,
-            image,
-            sortOrder,
-          };
-        });
-
-        ui.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-        setItems(ui);
-      } catch (e: any) {
-        setError(e?.message || 'Failed to load programs');
-        setItems(null);
-      } finally {
-        if (mounted) setIsLoading(false);
+          setItems(ui);
+        } catch (e: any) {
+          setError(e?.message || 'Failed to load programs');
+          setItems(null);
+        } finally {
+          if (mounted) setIsLoading(false);
+        }
       }
-    }
-    load();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+      load();
+      return () => {
+        mounted = false;
+      };
+    }, []);
 
-  /**
-   * Fallback static items for preview if Airtable is not available
-   */
-  const fallback: ProgramUIItem[] = useMemo(
-    () => [
-      {
-        id: 'fallback-1',
-        title: 'MTM The Future Today',
-        description:
-          'Comprehensive, team-based training system for highly efficient Medication Therapy Management services in community pharmacy.',
-        level: 'Foundation',
-        image:
-          'https://pub-cdn.sider.ai/u/U03VH4NVNOE/web-coder/687655a5b1dac45b18db4f5c/resource/946cb9a3-fa24-49e7-b738-de077d81b547.jpg',
-      },
-      {
-        id: 'fallback-2',
-        title: 'TimeMyMeds Sync',
-        description:
-          'Medication synchronization program that transitions your pharmacy to proactive, appointment-based care.',
-        level: 'Essential',
-        image:
-          'https://pub-cdn.sider.ai/u/U03VH4NVNOE/web-coder/687655a5b1dac45b18db4f5c/resource/c1c309c4-6e70-4a4e-80ab-46570de640d6.jpg',
-      },
-      {
-        id: 'fallback-3',
-        title: 'Test & Treat Services',
-        description: 'CLIA-waived testing with pharmacist-led treatment for Flu, Strep, and COVID-19.',
-        level: 'Advanced',
-        image:
-          'https://pub-cdn.sider.ai/u/U03VH4NVNOE/web-coder/687655a5b1dac45b18db4f5c/resource/367fbd69-f039-41cd-844a-6541f1f1925a.jpg',
-      },
-      {
-        id: 'fallback-4',
-        title: 'HbA1c Testing',
-        description: 'Point-of-care A1c testing integrated with diabetes care and MTM workflows.',
-        level: 'Intermediate',
-        image:
-          'https://pub-cdn.sider.ai/u/U03VH4NVNOE/web-coder/687655a5b1dac45b18db4f5c/resource/1cbdfd06-c689-489d-83cb-85872718236c.jpg',
-      },
-    ],
-    []
-  );
-
-  const programs = items ?? fallback;
+  const programs = items ?? [];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -210,7 +149,6 @@ export default function Programs() {
             {error && (
               <p className="mt-6 text-sm bg-white/15 px-3 py-2 rounded-md">
                 <SafeText value={error} />
-                {' — showing example data for preview.'}
               </p>
             )}
           </div>
@@ -250,7 +188,6 @@ export default function Programs() {
                           ) : null}
                         </div>
                         <div className="flex items-center gap-1 opacity-0">
-                          {/* Rating placeholder removed (no rating from Airtable). Keep layout consistent. */}
                           <Star className="h-4 w-4" />
                           <span className="text-sm font-medium">—</span>
                         </div>

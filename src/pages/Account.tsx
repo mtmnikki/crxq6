@@ -50,7 +50,7 @@ export default function Account() {
                   <label className="mb-2 block text-sm font-medium">First Name</label>
                   <input
                     type="text"
-                    value={String((user?.['firstName'] ?? '') as any)}
+                    value={String((user?.firstName ?? '') as any)}
                     className="w-full rounded-md border p-2"
                     readOnly
                   />
@@ -59,7 +59,7 @@ export default function Account() {
                   <label className="mb-2 block text-sm font-medium">Last Name</label>
                   <input
                     type="text"
-                    value={String((user?.['lastName'] ?? '') as any)}
+                    value={String((user?.lastName ?? '') as any)}
                     className="w-full rounded-md border p-2"
                     readOnly
                   />

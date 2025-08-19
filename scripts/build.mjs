@@ -24,7 +24,12 @@ const esbuildOpts = {
   minify: isProd,
   treeShaking: true,
   jsx: 'automatic',
+  define: {
+    'process.env.AIRTABLE_API_KEY': JSON.stringify(process.env.AIRTABLE_API_KEY || ''),
+  },
   loader: {
+    '.ts': 'ts',
+    '.tsx': 'tsx',
     '.html': 'copy',
     '.png': 'file',
   },

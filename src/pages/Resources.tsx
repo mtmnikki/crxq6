@@ -20,6 +20,7 @@ import {
   FileSpreadsheet,
   ClipboardList,
 } from 'lucide-react';
+import { listAllRecords, AirtableRecord } from '../lib/airtable';
 
 /**
  * Resource row structure for the demo table
@@ -36,15 +37,6 @@ interface LibResource {
  */
 type CategoryKey = 'handouts' | 'billing' | 'clinical';
 
-/**
- * Demo resource data
- */
-const RESOURCES: LibResource[] = [
-  { id: 'r1', name: 'Beers Criteria Chart', program: 'General', type: 'Clinical' },
-  { id: 'r2', name: 'TMM Appointment Day Form', program: 'TimeMyMeds', type: 'Form' }, // billing-ish
-  { id: 'r3', name: 'My Cholesterol Guide', program: 'General', type: 'Handout' },
-  { id: 'r4', name: 'Test and Treat Protocol Manual', program: 'Test & Treat', type: 'Protocol' },
-];
 
 /**
  * Lightweight pill component with count (compact, interactive)
@@ -139,35 +131,66 @@ export default function Resources() {
   const [search, setSearch] = useState('');
   // Active category derived from URL (?cat=...)
   const [activeCat, setActiveCat] = useState<CategoryKey | null>(getCategoryFromSearch(location.search));
+  const [resources, setResources] = useState<LibResource[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   /** Sync category with URL when it changes externally (e.g., via sidebar navigation) */
   useEffect(() => {
     setActiveCat(getCategoryFromSearch(location.search));
   }, [location.search]);
 
+  /** Load resources from Airtable */
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      try {
+        setLoading(true);
+        setError('');
+        const res = await listAllRecords<Record<string, any>>({
+          table: 'ResourceLibrary',
+          fields: ['resourceName', 'className', 'programName'],
+        });
+        if (!mounted) return;
+        const mapped: LibResource[] = res.map((r: AirtableRecord<Record<string, any>>) => ({
+          id: r.id,
+          name: (r.fields['resourceName'] as string) || 'Untitled',
+          program: '',
+          type: ((r.fields['className'] as string) || 'General') as LibResource['type'],
+        }));
+        setResources(mapped);
+      } catch (e: any) {
+        if (mounted) setError(e?.message || 'Failed to load resources');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   /** Apply filter function based on active category + search */
   const filtered = useMemo(() => {
-    const list = [...RESOURCES];
     const cat = activeCat ? typesForCategory(activeCat) : null;
-    return list.filter((r) => {
+    return resources.filter((r) => {
       const byCat = cat ? cat.includes(r.type) : true;
       const q = search.trim().toLowerCase();
       const bySearch = q ? (r.name.toLowerCase().includes(q) || r.program.toLowerCase().includes(q)) : true;
       return byCat && bySearch;
     });
-  }, [activeCat, search]);
+  }, [activeCat, search, resources]);
 
-  /** Quick counters for pills (demo count derived from current dataset) */
+  /** Quick counters for pills */
   const counts = useMemo(() => {
     return {
-      handouts: RESOURCES.filter((r) => r.type === 'Handout').length,
-      clinical: RESOURCES.filter((r) => r.type === 'Clinical').length,
-      billing: RESOURCES.filter((r) => r.type === 'Form').length,
-      protocols: RESOURCES.filter((r) => r.type === 'Protocol').length,
-      training: 20, // static demo
-      docs: 60, // static demo
+      handouts: resources.filter((r) => r.type === 'Handout').length,
+      clinical: resources.filter((r) => r.type === 'Clinical').length,
+      billing: resources.filter((r) => r.type === 'Form').length,
+      protocols: resources.filter((r) => r.type === 'Protocol').length,
     };
-  }, []);
+  }, [resources]);
 
   /** Handlers to set category and sync URL */
   function setCategory(cat: CategoryKey | null) {
@@ -187,7 +210,7 @@ export default function Resources() {
           <div className="space-y-0.5">
             <div className="text-[20px] font-semibold">Complete Resource Library</div>
             <div className="text-[12px] text-slate-600">
-              Browse all 189 clinical and general pharmacy resources
+              Browse all {resources.length} clinical and general pharmacy resources
             </div>
           </div>
 
@@ -246,10 +269,7 @@ export default function Resources() {
               active={activeCat === 'billing'}
               onClick={() => setCategory('billing')}
             />
-            {/* Non-linked demo pills remain static (optional) */}
             <CategoryPill icon={ClipboardList} label="Protocols" count={counts.protocols} active={false} />
-            <CategoryPill icon={BookText} label="Training" count={20} active={false} />
-            <CategoryPill icon={FileSpreadsheet} label="Documentation Forms" count={counts.docs} active={false} />
             {/* Clear filter chip (shows when filtered) */}
             {activeCat && (
               <button
@@ -265,77 +285,11 @@ export default function Resources() {
       }
       sidebar={<MemberSidebar />}
     >
-      {/* Main two-column content: Filters (left) + Resource table (right) */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[320px_1fr]">
-        {/* Filters card */}
-        <Card className="border-slate-200">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Filters</CardTitle>
-          </CardHeader>
-          <CardContent className="text-[13px]">
-            {/* Search in filters */}
-            <div className="mb-3">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search by name or tag"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="h-8 w-full rounded-md border border-slate-200 bg-white pl-8 pr-3 text-[13px] shadow-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
-                />
-              </div>
-            </div>
-
-            {/* Clinical Program checkboxes — demo only */}
-            <div className="mb-3">
-              <div className="mb-1.5 text-xs font-medium text-slate-700">Clinical Program</div>
-              <div className="space-y-1.5 text-[13px] text-slate-700">
-                {['MTM', 'TimeMyMeds', 'Test and Treat', 'HbA1C Testing', 'Oral Contraceptives'].map(
-                  (p) => (
-                    <label key={p} className="flex items-center gap-2">
-                      <input type="checkbox" className="h-3.5 w-3.5 rounded border-slate-300" />
-                      <span>{p}</span>
-                    </label>
-                  )
-                )}
-              </div>
-            </div>
-
-            {/* Resource Type checkboxes — demo only */}
-            <div className="mb-4">
-              <div className="mb-1.5 text-xs font-medium text-slate-700">Resource Type</div>
-              <div className="space-y-1.5 text-[13px] text-slate-700">
-                {[
-                  'Training Module',
-                  'Protocols & Manuals',
-                  'Documentation Forms',
-                  'Clinical Resources',
-                  'Patient Handouts',
-                  'Medical Billing',
-                ].map((t) => (
-                  <label key={t} className="flex items-center gap-2">
-                    <input type="checkbox" className="h-3.5 w-3.5 rounded border-slate-300" />
-                    <span>{t}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button className="h-8 px-3">Apply Filters</Button>
-              <Button
-                variant="outline"
-                className="bg-transparent h-8 px-3"
-                onClick={() => setCategory(null)}
-              >
-                Clear
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Resource table card */}
+      {loading ? (
+        <div className="py-10 text-center text-sm text-slate-600">Loading resources…</div>
+      ) : error ? (
+        <div className="py-10 text-center text-sm text-red-600">{error}</div>
+      ) : (
         <Card className="border-slate-200">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Resource Library</CardTitle>
@@ -374,7 +328,7 @@ export default function Resources() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      )}
     </AppShell>
   );
 }

@@ -83,7 +83,7 @@ export default function Header() {
                 <div className="flex items-center space-x-2">
                   <UserIcon className="h-4 w-4 text-gray-500" />
                   <span className="text-sm text-gray-700">
-                    <SafeText value={user?.['firstName']} /> <SafeText value={user?.['lastName']} />
+                    <SafeText value={user?.firstName} /> <SafeText value={user?.lastName} />
                   </span>
                 </div>
 
@@ -162,7 +162,7 @@ export default function Header() {
                   <div className="flex items-center px-3 py-2">
                     <UserIcon className="h-4 w-4 text-gray-500 mr-2" />
                     <span className="text-sm text-gray-700">
-                      <SafeText value={user?.['firstName']} /> <SafeText value={user?.['lastName']} />
+                      <SafeText value={user?.firstName} /> <SafeText value={user?.lastName} />
                     </span>
                   </div>
 

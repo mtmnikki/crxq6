@@ -28,6 +28,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const mockUser: User = {
         id: '1',
         email: 'demo@clinicalrxq.com',
+        name: 'Demo User',
         firstName: 'Demo',
         lastName: 'User',
         role: 'member',

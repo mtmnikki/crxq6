@@ -1,9 +1,9 @@
 /**
  * Program Detail page - Shows detailed information about a specific clinical program
- * - Uses Airtable Table IDs and Field IDs directly
+ * - Uses table and field names from the new Airtable base
  * - Supports both slug and record ID in the URL for backward compatibility
  * - Shows program overview, modules, resources, and implementation details
- */
+*/
 
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router';
@@ -24,8 +24,7 @@ import {
   ArrowLeft,
   Star
 } from 'lucide-react';
-import { getRecord, listRecords, AirtableRecord } from '../lib/airtable';
-import { FIELD_IDS, TABLE_IDS } from '../config/airtableConfig';
+import { listRecords, listAllRecords, getAttachmentArray } from '../lib/airtable';
 import { slugify } from '../lib/slug';
 import { getSelectText } from '../lib/cellValue';
 import SafeText from '../components/common/SafeText';
@@ -76,51 +75,17 @@ export default function ProgramDetail() {
         setLoading(true);
         setError('');
 
-        // Try to find by slug first, then by record ID
-        let record: AirtableRecord<Record<string, any>> | null = null;
-        
-        // Try to get by record ID first (for backward compatibility)
-        if (id.startsWith('rec')) {
-          try {
-            record = await getRecord<Record<string, any>>({
-              tableId: TABLE_IDS.programs,
-              recordId: id,
-              fields: [
-                FIELD_IDS.programs.name,
-                FIELD_IDS.programs.description,
-                FIELD_IDS.programs.level,
-                FIELD_IDS.programs.photo,
-                FIELD_IDS.programs.summary,
-              ],
-            });
-          } catch (e) {
-            // Record not found by ID, continue to slug search
-          }
-        }
+        // Load all programs and find by record ID or slug
+        const all = await listRecords<Record<string, any>>({
+          table: 'ClinicalPrograms',
+          pageSize: 100,
+          fields: ['programName', 'programDescription', 'experienceLevel', 'programSlug'],
+        });
 
-        // If not found by ID, search by slug
-        if (!record) {
-          const allRecords = await listRecords<Record<string, any>>({
-            tableId: TABLE_IDS.programs,
-            pageSize: 100,
-            fields: [
-              FIELD_IDS.programs.name,
-              FIELD_IDS.programs.description,
-              FIELD_IDS.programs.level,
-              FIELD_IDS.programs.photo,
-              FIELD_IDS.programs.summary,
-            ],
-          });
-
-          const found = allRecords.records.find(r => {
-            const title = r.fields[FIELD_IDS.programs.name] as string || '';
-            return slugify(title) === id;
-          });
-
-          if (found) {
-            record = found;
-          }
-        }
+        const record = all.records.find((r) => {
+          const slug = (r.fields['programSlug'] as string) || slugify((r.fields['programName'] as string) || '');
+          return r.id === id || slug === id;
+        });
 
         if (!record) {
           setError('Program not found');
@@ -128,61 +93,59 @@ export default function ProgramDetail() {
         }
 
         // Map to UI format
-        const title = (record.fields[FIELD_IDS.programs.name] as string) || 'Untitled Program';
-        const description = (record.fields[FIELD_IDS.programs.description] as string) || 
-                           (record.fields[FIELD_IDS.programs.summary] as string) || '';
-        const level = getSelectText(record.fields[FIELD_IDS.programs.level]);
+        const title = (record.fields['programName'] as string) || 'Untitled Program';
+        const description = (record.fields['programDescription'] as string) || '';
+        const level = getSelectText(record.fields['experienceLevel']);
         
-        // Mock modules and resources for now
-        const modules: ModuleUI[] = [
-          {
-            id: '1',
-            title: 'Introduction',
-            description: 'Overview of the program and its objectives',
-            duration: '30 min',
-            videoUrl: '#',
-            completed: false
-          },
-          {
-            id: '2',
-            title: 'Core Concepts',
-            description: 'Understanding the fundamental principles',
-            duration: '45 min',
-            videoUrl: '#',
-            completed: false
-          }
-        ];
+        // Load related modules
+        const modulesRes = await listAllRecords<Record<string, any>>({
+          table: 'TrainingModules',
+          filterByFormula: `SEARCH('${record.id}', ARRAYJOIN(programName))`,
+          fields: ['moduleName', 'moduleLength', 'moduleLink', 'moduleFile', 'sortOrder'],
+        });
+        const modules: ModuleUI[] = modulesRes
+          .sort(
+            (a, b) =>
+              ((a.fields['sortOrder'] as number) || 0) - ((b.fields['sortOrder'] as number) || 0)
+          )
+          .map((m) => {
+            const files = getAttachmentArray(m.fields['moduleFile']);
+            const videoUrl = (m.fields['moduleLink'] as string) || files[0]?.url;
+            return {
+              id: m.id,
+              title: (m.fields['moduleName'] as string) || 'Module',
+              description: '',
+              duration: (m.fields['moduleLength'] as string) || undefined,
+              videoUrl,
+            };
+          });
 
-        const resources: ResourceUI[] = [
-          {
-            id: '1',
-            title: 'Program Manual',
-            type: 'PDF',
-            url: '#',
-            description: 'Comprehensive guide to implementing the program'
-          },
-          {
-            id: '2',
-            title: 'Training Video',
-            type: 'Video',
-            url: '#',
-            description: 'Step-by-step implementation guide'
-          }
-        ];
-
-        const image = record.fields[FIELD_IDS.programs.photo] as any;
-        const imageUrl = image && image.length > 0 ? image[0].url : undefined;
+        // Load related resources from ResourceLibrary table
+        const resourcesRes = await listAllRecords<Record<string, any>>({
+          table: 'ResourceLibrary',
+          filterByFormula: `SEARCH('${record.id}', ARRAYJOIN(programName))`,
+          fields: ['resourceName', 'resourceLink', 'resourceFile', 'className'],
+        });
+        const resources: ResourceUI[] = resourcesRes.map((r) => {
+          const files = getAttachmentArray(r.fields['resourceFile']);
+          const url = (r.fields['resourceLink'] as string) || files[0]?.url;
+          return {
+            id: r.id,
+            title: (r.fields['resourceName'] as string) || 'Resource',
+            type: (r.fields['className'] as string) || 'Resource',
+            url,
+            description: undefined,
+          };
+        });
 
         const programData: ProgramDetailUI = {
           id: record.id,
           title,
           description,
           level,
-          duration: '8 weeks',
           modules,
           resources,
-          image: imageUrl,
-          highlights: level ? [level] : []
+          highlights: level ? [level] : [],
         };
 
         if (mounted) {

@@ -1,22 +1,21 @@
 /**
  * Member Content page - Central hub for accessing all clinical programs and resources
  * - Adds breadcrumb navigation anchored at Dashboard.
- * Uses Airtable Table IDs and Field IDs directly (no formulas).
- * Links Program Detail using a human-readable slug derived from Program Name.
- * ProgramDetail supports both slug and recXXXXXXXX for backward compatibility.
+ * - Uses table and field names from the new Airtable base (no formulas).
+ * - Links Program Detail using a human-readable slug derived from Program Name.
+ * - ProgramDetail supports both slug and recXXXXXXXX for backward compatibility.
  * - Sanitizes description/level fields to avoid rendering [object Object].
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import Header from '../components/layout/Header';
 import Footer from '../components/layout/Footer';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
-import { BookOpen, FileText, Clock as ClockIcon, Zap, Award, Play } from 'lucide-react';
+import { BookOpen, FileText, Zap, Award, Play } from 'lucide-react';
 
 import { listRecords, AirtableRecord } from '../lib/airtable';
-import { FIELD_IDS, TABLE_IDS } from '../config/airtableConfig';
 import { slugify } from '../lib/slug';
 import { getSelectText } from '../lib/cellValue';
 import SafeText from '../components/common/SafeText';
@@ -91,46 +90,29 @@ export default function MemberContent() {
     async function load() {
       try {
         const res = await listRecords<Record<string, any>>({
-          tableId: TABLE_IDS.programs,
+          table: 'ClinicalPrograms',
           pageSize: 100,
-          fields: [
-            FIELD_IDS.programs.name,
-            FIELD_IDS.programs.summary,
-            FIELD_IDS.programs.description,
-            FIELD_IDS.programs.level,
-            FIELD_IDS.programs.sortOrder,
-          ],
+          fields: ['programName', 'programDescription', 'experienceLevel'],
         });
 
         if (!mounted) return;
 
         // Map to UI and sort by Sort Order (ascending) when available.
-        const ui = res.records
-          .map((rec: AirtableRecord<Record<string, any>>): ProgramUIItem => {
-            const title = (rec.fields[FIELD_IDS.programs.name] as string) || 'Untitled Program';
-            const summaryRaw = rec.fields[FIELD_IDS.programs.summary];
-            const descriptionRaw = rec.fields[FIELD_IDS.programs.description];
-            const description = coerceToText(summaryRaw) || coerceToText(descriptionRaw) || '';
-            const levelSelect = getSelectText(rec.fields[FIELD_IDS.programs.level]);
-            const level = coerceToText(levelSelect) || undefined;
-            const visuals = getProgramVisuals(level);
-            return {
-              id: rec.id, // Airtable record ID
-              title,
-              description,
-              level,
-              highlights: level ? [level] : undefined,
-              color: visuals.color,
-              icon: visuals.icon,
-            };
-          })
-          .sort((a, b) => {
-            const aRec = res.records.find((r) => r.id === a.id);
-            const bRec = res.records.find((r) => r.id === b.id);
-            const aSort = Number(aRec?.fields[FIELD_IDS.programs.sortOrder] || 0);
-            const bSort = Number(bRec?.fields[FIELD_IDS.programs.sortOrder] || 0);
-            return aSort - bSort;
-          });
+        const ui = res.records.map((rec: AirtableRecord<Record<string, any>>): ProgramUIItem => {
+          const title = (rec.fields['programName'] as string) || 'Untitled Program';
+          const description = coerceToText(rec.fields['programDescription']);
+          const level = getSelectText(rec.fields['experienceLevel']);
+          const visuals = getProgramVisuals(level);
+          return {
+            id: rec.id,
+            title,
+            description,
+            level,
+            highlights: level ? [level] : undefined,
+            color: visuals.color,
+            icon: visuals.icon,
+          };
+        });
 
         setItems(ui);
       } catch (e: any) {
@@ -144,34 +126,7 @@ export default function MemberContent() {
     };
   }, []);
 
-  // Static fallback items for preview if Airtable fails
-  const fallbackPrograms: ProgramUIItem[] = useMemo(
-    () => [
-      {
-        id: 'fallback-1',
-        title: 'MTM The Future Today',
-        description:
-          'Comprehensive, team-based training system for Medication Therapy Management services',
-        level: 'Foundation',
-        highlights: ['Flagship Program', 'Team-Based', 'Proven ROI'],
-        color: 'from-blue-600 via-cyan-500 to-teal-300',
-        icon: FileText,
-      },
-      {
-        id: 'fallback-2',
-        title: 'TimeMyMeds',
-        description:
-          'Medication synchronization program creating proactive, appointment-based patient care',
-        level: 'Essential',
-        highlights: ['Operational Flywheel', 'Patient Loyalty', 'Workflow'],
-        color: 'from-blue-600 via-cyan-500 to-teal-300',
-        icon: ClockIcon,
-      },
-    ],
-    []
-  );
-
-  const programs = items ?? fallbackPrograms;
+  const programs = items ?? [];
 
   return (
     <div className="min-h-screen bg-gray-50">
