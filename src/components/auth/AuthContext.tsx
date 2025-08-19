@@ -52,8 +52,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (s === 'active') subscriptionStatus = 'Active';
 
     // Build a composed name safely (handles undefined pieces)
-    const first = (user as any).firstName as string | undefined;
-    const last = (user as any).lastName as string | undefined;
+    const first = user.firstName;
+    const last = user.lastName;
     const composedName = `${first ?? ''} ${last ?? ''}`.trim();
     // Use user.name if present, otherwise composedName, otherwise "Member"
     const pharmacyName = user.name ?? (composedName || 'Member');
@@ -63,8 +63,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       lastLoginISO: user.createdAt ? new Date(user.createdAt).toISOString() : undefined,
       subscriptionStatus,
       email: user.email,
-      firstName: (user as any).firstName,
-      lastName: (user as any).lastName,
+      firstName: user.firstName,
+      lastName: user.lastName,
     };
   }, [isAuthenticated, user]);
 

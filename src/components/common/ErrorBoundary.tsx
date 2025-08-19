@@ -41,9 +41,7 @@ export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, E
    * Lifecycle: update state when an error is thrown
    */
   static getDerivedStateFromError(error: unknown): ErrorBoundaryState {
-    const message =
-      (error && typeof error === 'object' && 'message' in error && String((error as any).message)) ||
-      'Something went wrong.';
+    const message = error instanceof Error ? error.message : 'Something went wrong.';
     return { hasError: true, message };
   }
 
@@ -80,7 +78,7 @@ export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, E
         <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
           <div className="max-w-lg w-full bg-white border border-gray-200 rounded-xl shadow-lg p-8 text-center">
             <div className="w-14 h-14 rounded-full bg-red-50 border border-red-100 mx-auto mb-4 flex items-center justify-center">
-              <span className="text-red-500 text-2xl" aria-hidden>!</span>
+              <span className="text-red-500 text-2xl" aria-hidden="true">!</span>
             </div>
             <h1 className="text-xl font-semibold mb-2">Something went wrong</h1>
             <p className="text-sm text-gray-600 mb-6">

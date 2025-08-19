@@ -1,61 +1,19 @@
 /**
  * Dashboard page
- * - Purpose: Rich member dashboard with programs, quick access, bookmarks, activity, and announcements.
- * - Update: Remove dates under welcome message; simplify resource cards (icon + name + download/watch).
+ * - Shows member info and list of clinical programs loaded from Airtable.
  * - Desktop-dense pass: compact typography, smaller paddings, tighter grid gaps.
- */
+*/
 
 import React, { useEffect, useMemo, useState } from 'react';
 import AppShell from '../components/layout/AppShell';
 import { useAuth } from '../components/auth/AuthContext';
-import { Api } from '../services/api';
-import {
-  Announcement,
-  ClinicalProgram,
-  QuickAccessItem,
-  RecentActivity,
-  ResourceItem,
-} from '../services/api/types';
+import { listAllRecords } from '../lib/airtable';
 import { Button } from '../components/ui/button';
-import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import {
-  ArrowRight,
-  Download,
-  PlayCircle,
-  FileText,
-} from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { Link } from 'react-router';
 import AirtableStatus from '../components/ui/AirtableStatus';
 import MemberSidebar from '../components/layout/MemberSidebar';
-
-/**
- * Helper: map string icon names to lucide-react components safely.
- */
-function iconByName(name?: string) {
-  switch ((name || '').trim()) {
-    case 'ClipboardCheck':
-      return require('lucide-react').ClipboardCheck;
-    case 'CalendarCheck':
-      return require('lucide-react').CalendarCheck;
-    case 'Stethoscope':
-      return require('lucide-react').Stethoscope;
-    case 'Activity':
-      return require('lucide-react').Activity;
-    case 'FileText':
-      return require('lucide-react').FileText;
-    case 'FileSpreadsheet':
-      return require('lucide-react').FileSpreadsheet;
-    case 'TestTubes':
-      return require('lucide-react').TestTubes;
-    case 'PlayCircle':
-      return require('lucide-react').PlayCircle;
-    case 'Star':
-      return require('lucide-react').Star;
-    default:
-      return ArrowRight;
-  }
-}
 
 /**
  * Helper UI chips (compact)
@@ -65,77 +23,34 @@ const StatChip: React.FC<{ label: string }> = ({ label }) => (
 );
 
 /**
- * Quick access card component (compact, simplified)
- * - Shows icon + title + action button only.
- * - If the item is a video and duration is available, show a small duration line.
- */
-const QuickCard: React.FC<{ item: QuickAccessItem }> = ({ item }) => {
-  const Icon = iconByName(item.icon);
-  const isVideo = (item as any)?.mediaType === 'video' || item.cta === 'Watch';
-  const duration = (item as any)?.duration as string | undefined;
-
-  return (
-    <Card className="hover:shadow-md">
-      <CardHeader className="pb-2">
-        <div className="flex items-center gap-2">
-          <Icon className="h-4 w-4 text-slate-600" />
-          <CardTitle className="text-sm">{item.title}</CardTitle>
-        </div>
-        {isVideo && duration ? (
-          <div className="text-[11px] text-slate-500">{duration}</div>
-        ) : null}
-      </CardHeader>
-      <CardContent>
-        {isVideo ? (
-          <Button variant="secondary" className="h-8 w-full px-3">
-            <PlayCircle className="mr-2 h-3.5 w-3.5" />
-            Watch
-          </Button>
-        ) : (
-          <Button variant="secondary" className="h-8 w-full px-3">
-            <Download className="mr-2 h-3.5 w-3.5" />
-            Download
-          </Button>
-        )}
-      </CardContent>
-    </Card>
-  );
-};
-
-/**
  * Dashboard component (compact)
  */
 export default function Dashboard() {
   const { member } = useAuth();
-  const [programs, setPrograms] = useState<ClinicalProgram[]>([]);
-  const [quick, setQuick] = useState<QuickAccessItem[]>([]);
-  const [bookmarks, setBookmarks] = useState<ResourceItem[]>([]);
-  const [activity, setActivity] = useState<RecentActivity[]>([]);
-  const [ann, setAnn] = useState<Announcement[]>([]);
+  const [programs, setPrograms] = useState<Array<{ id: string; name: string; description: string; slug: string }>>([]);
 
   /**
-   * Load dashboard data in parallel.
+   * Load programs from Airtable
    */
   useEffect(() => {
     let mounted = true;
     async function load() {
       try {
-        const [p, q, b, a, an] = await Promise.all([
-          Api.getPrograms(),
-          Api.getQuickAccess(),
-          Api.getBookmarkedResources(),
-          Api.getRecentActivity(),
-          Api.getAnnouncements(),
-        ]);
+        const res = await listAllRecords<Record<string, any>>({
+          table: 'ClinicalPrograms',
+          fields: ['programName', 'programDescription', 'programSlug'],
+        });
         if (!mounted) return;
-        setPrograms(p);
-        setQuick(q);
-        setBookmarks(b);
-        setActivity(a);
-        setAnn(an);
+        const mapped = res.map((r) => ({
+          id: r.id,
+          name: (r.fields['programName'] as string) || 'Untitled Program',
+          description: (r.fields['programDescription'] as string) || '',
+          slug: (r.fields['programSlug'] as string) || r.id,
+        }));
+        setPrograms(mapped);
       } catch (e) {
         // eslint-disable-next-line no-console
-        console.error('Error loading dashboard data:', e);
+        console.error('Error loading programs:', e);
       }
     }
     load();
@@ -192,142 +107,21 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {programs.map((p) => {
-            const Icon = iconByName(p.icon);
-            return (
-              <Link key={p.slug} to={`/program/${p.slug}`}>
-                <Card className="group border-blue-50 hover:border-blue-200 hover:shadow-md">
-                  <CardHeader className="pb-1.5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-blue-600" />
-                        <CardTitle className="text-sm">{p.name}</CardTitle>
-                      </div>
-                      <Badge variant="secondary" className="text-[11px]">
-                        {p.resourceCount} resources
-                      </Badge>
-                    </div>
-                    <div className="text-[12px] text-slate-500">
-                      Updated {p.lastUpdatedISO ? new Date(p.lastUpdatedISO).toLocaleDateString() : '—'}
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-[13px] text-slate-600">{p.description}</p>
-                  </CardContent>
-                </Card>
-              </Link>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Quick access */}
-      <section className="mb-6">
-        <h2 className="mb-2.5 text-base font-semibold">Quick Access</h2>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {quick.map((q) => (
-            <QuickCard key={q.id} item={q} />
+          {programs.map((p) => (
+            <Link key={p.slug} to={`/program/${p.slug}`}>
+              <Card className="group border-blue-50 hover:border-blue-200 hover:shadow-md">
+                <CardHeader className="pb-1.5">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-blue-600" />
+                    <CardTitle className="text-sm">{p.name}</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-[13px] text-slate-600">{p.description}</p>
+                </CardContent>
+              </Card>
+            </Link>
           ))}
-        </div>
-      </section>
-
-      {/* Bookmarked resources */}
-      <section className="mb-6">
-        <div className="mb-2.5 flex items-center justify-between">
-          <h2 className="text-base font-semibold">Your Bookmarked Resources</h2>
-          <Link to="/resources" className="text-[12px] text-blue-700 hover:underline">
-            View All
-          </Link>
-        </div>
-        {bookmarks.length === 0 ? (
-          <div className="rounded-md border border-dashed p-4 text-[13px] text-slate-600">
-            No bookmarks yet. Explore the Resource Library and add bookmarks for quick access.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {bookmarks.map((b) => {
-              // Lightweight heuristics for icon + optional duration if it's a video
-              const isVideo =
-                (b as any)?.mediaType === 'video' ||
-                typeof (b as any)?.duration === 'string' ||
-                String((b as any)?.type || '').toLowerCase() === 'video';
-              const duration = (b as any)?.duration as string | undefined;
-
-              return (
-                <Card key={b.id} className="hover:shadow-sm">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center gap-2">
-                      {isVideo ? (
-                        <PlayCircle className="h-4 w-4 text-slate-600" />
-                      ) : (
-                        <FileText className="h-4 w-4 text-slate-600" />
-                      )}
-                      <CardTitle className="text-[13px]">{b.name}</CardTitle>
-                    </div>
-                    {isVideo && duration ? (
-                      <div className="text-[11px] text-slate-500">{duration}</div>
-                    ) : null}
-                  </CardHeader>
-                  <CardContent>
-                    <Button size="sm" variant="secondary" className="h-8 w-full px-3">
-                      <Download className="mr-2 h-3.5 w-3.5" />
-                      Download
-                    </Button>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* Recent activity and announcements (unchanged functionally) */}
-      <section className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-        <div className="xl:col-span-2">
-          <Card>
-            <CardHeader className="pb-1.5">
-              <CardTitle className="text-sm">Recently Accessed</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="divide-y">
-                {activity.map((a) => (
-                  <div key={a.id} className="flex items-center justify-between py-2">
-                    <div>
-                      <div className="text-[13px] font-medium">{a.name}</div>
-                      <div className="text-[12px] text-slate-500">
-                        {a.program?.toUpperCase()} • {new Date(a.accessedAtISO).toLocaleString()}
-                      </div>
-                    </div>
-                    <Button size="sm" variant="outline" className="bg-transparent h-8 px-3">
-                      <Download className="mr-2 h-3.5 w-3.5" />
-                      Re-download
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div>
-          <Card>
-            <CardHeader className="pb-1.5">
-              <CardTitle className="text-sm">Announcements</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {ann.map((an) => (
-                  <div key={an.id} className="rounded-md border p-2.5">
-                    <div className="text-[13px] font-semibold">{an.title}</div>
-                    <div className="text-[12px] text-slate-500">
-                      {new Date(an.dateISO).toLocaleDateString()}
-                    </div>
-                    <div className="mt-0.5 text-[13px] text-slate-700">{an.body}</div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </section>
     </AppShell>

@@ -1,13 +1,11 @@
 /**
- * New minimal Airtable REST client (ID-first)
- * - Uses returnFieldsByFieldId=true to return fields keyed by Field IDs.
- * - Reads PAT from config getAirtableToken (fallback integrated per user request).
- * - Provides helpers to list records, get a single record, and list all pages.
+ * Minimal Airtable REST client using table and field names.
+ * - Uses the AIRTABLE_API_KEY environment variable for authentication.
+ * - Works with the new base appuo6esxsc55yCgI.
  */
 
 import { AIRTABLE_BASE_ID, getAirtableToken } from '../config/airtableConfig';
 
-/** Generic Airtable record keyed by Field IDs */
 export interface AirtableRecord<TFields = Record<string, unknown>> {
   id: string;
   createdTime: string;
@@ -19,51 +17,32 @@ interface ListResponse<TFields> {
   offset?: string;
 }
 
-/**
- * Build table URL with query params (returnFieldsByFieldId always true).
- */
-function buildTableUrl(
-  tableId: string,
-  params?: Record<string, string | number | boolean | undefined>
-) {
+function buildTableUrl(table: string, params?: Record<string, string | number | boolean | undefined>) {
   const sp = new URLSearchParams();
-  sp.set('returnFieldsByFieldId', 'true');
-  if (params) {
-    Object.entries(params).forEach(([k, v]) => {
-      if (v !== undefined && v !== null) sp.append(k, String(v));
-    });
-  }
-  return `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${tableId}?${sp.toString()}`;
-}
-
-/**
- * Build record URL with query params (returnFieldsByFieldId always true).
- */
-function buildRecordUrl(
-  tableId: string,
-  recordId: string,
-  params?: Record<string, string | number | boolean | undefined>
-) {
-  const sp = new URLSearchParams();
-  sp.set('returnFieldsByFieldId', 'true');
   if (params) {
     Object.entries(params).forEach(([k, v]) => {
       if (v !== undefined && v !== null) sp.append(k, String(v));
     });
   }
   const query = sp.toString();
-  return `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${tableId}/${recordId}?${query}`;
+  return `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(table)}${query ? `?${query}` : ''}`;
 }
 
-/**
- * Perform an authorized fetch to Airtable with typed JSON result.
- */
+function buildRecordUrl(table: string, recordId: string, params?: Record<string, string | number | boolean | undefined>) {
+  const sp = new URLSearchParams();
+  if (params) {
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null) sp.append(k, String(v));
+    });
+  }
+  const query = sp.toString();
+  return `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(table)}/${recordId}${query ? `?${query}` : ''}`;
+}
+
 async function airtableFetch<T = unknown>(url: string, init?: RequestInit): Promise<T> {
   const token = getAirtableToken();
   if (!token) {
-    throw new Error(
-      'Airtable PAT not found. Please set it with localStorage.setItem("AIRTABLE_PAT", "your_pat").'
-    );
+    throw new Error('Airtable API key not configured');
   }
   const res = await fetch(url, {
     ...init,
@@ -80,16 +59,12 @@ async function airtableFetch<T = unknown>(url: string, init?: RequestInit): Prom
   return res.json() as Promise<T>;
 }
 
-/**
- * List records from a table with optional pagination and sorting.
- * - fields[] expects Field IDs when returnFieldsByFieldId=true.
- */
 export async function listRecords<TFields = Record<string, unknown>>(opts: {
-  tableId: string;
+  table: string;
   pageSize?: number;
   offset?: string;
   filterByFormula?: string;
-  fields?: string[]; // Field IDs
+  fields?: string[];
   view?: string;
   sort?: { field: string; direction?: 'asc' | 'desc' }[];
 }): Promise<ListResponse<TFields>> {
@@ -105,53 +80,29 @@ export async function listRecords<TFields = Record<string, unknown>>(opts: {
     });
   }
 
-  let url = buildTableUrl(opts.tableId, params);
+  let url = buildTableUrl(opts.table, params);
   if (opts.fields?.length) {
     const append = opts.fields.map((f) => `fields[]=${encodeURIComponent(f)}`).join('&');
-    url = `${url}&${append}`;
+    url = `${url}${url.includes('?') ? '&' : '?'}${append}`;
   }
   return airtableFetch<ListResponse<TFields>>(url);
 }
 
-/**
- * Get a single record by Record ID.
- */
 export async function getRecord<TFields = Record<string, unknown>>(opts: {
-  tableId: string;
+  table: string;
   recordId: string;
   fields?: string[];
 }): Promise<AirtableRecord<TFields>> {
-  let url = buildRecordUrl(opts.tableId, opts.recordId);
+  let url = buildRecordUrl(opts.table, opts.recordId);
   if (opts.fields?.length) {
     const append = opts.fields.map((f) => `fields[]=${encodeURIComponent(f)}`).join('&');
-    url = `${url}&${append}`;
+    url = `${url}${url.includes('?') ? '&' : '?'}${append}`;
   }
   return airtableFetch<AirtableRecord<TFields>>(url);
 }
 
-/**
- * List multiple records by record IDs using a filterByFormula with OR(RECORD_ID()=...).
- */
-export async function listRecordsByIds<TFields = Record<string, unknown>>(opts: {
-  tableId: string;
-  recordIds: string[];
-  fields?: string[];
-}): Promise<ListResponse<TFields>> {
-  if (!opts.recordIds.length) return { records: [] };
-  const formula = `OR(${opts.recordIds.map((id) => `RECORD_ID()='${id}'`).join(',')})`;
-  return listRecords<TFields>({
-    tableId: opts.tableId,
-    filterByFormula: formula,
-    fields: opts.fields,
-    pageSize: 100,
-  });
-}
-
-/**
- * List all records transparently across pages (with optional cap).
- */
 export async function listAllRecords<TFields = Record<string, unknown>>(opts: {
-  tableId: string;
+  table: string;
   pageSize?: number;
   maxRecords?: number;
   filterByFormula?: string;
@@ -164,13 +115,13 @@ export async function listAllRecords<TFields = Record<string, unknown>>(opts: {
   const out: AirtableRecord<TFields>[] = [];
 
   // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const res = await listRecords<TFields>({
-      tableId: opts.tableId,
-      pageSize,
-      offset,
-      filterByFormula: opts.filterByFormula,
-      fields: opts.fields,
+    while (true) {
+      const res: ListResponse<TFields> = await listRecords<TFields>({
+        table: opts.table,
+        pageSize,
+        offset,
+        filterByFormula: opts.filterByFormula,
+        fields: opts.fields,
       view: opts.view,
       sort: opts.sort,
     });
@@ -184,14 +135,8 @@ export async function listAllRecords<TFields = Record<string, unknown>>(opts: {
   return out;
 }
 
-/**
- * Attachment helper
- */
 export type SimpleAttachment = { id: string; url: string; filename: string };
 
-/**
- * Safely extract attachment objects from a field value.
- */
 export function getAttachmentArray(fieldValue: unknown): SimpleAttachment[] {
   if (!Array.isArray(fieldValue)) return [];
   return fieldValue
@@ -205,4 +150,19 @@ export function getAttachmentArray(fieldValue: unknown): SimpleAttachment[] {
       return null;
     })
     .filter(Boolean) as SimpleAttachment[];
+}
+
+export async function listRecordsByIds<TFields = Record<string, unknown>>(opts: {
+  table: string;
+  recordIds: string[];
+  fields?: string[];
+}): Promise<ListResponse<TFields>> {
+  if (!opts.recordIds.length) return { records: [] };
+  const formula = `OR(${opts.recordIds.map((id) => `RECORD_ID()='${id}'`).join(',')})`;
+  return listRecords<TFields>({
+    table: opts.table,
+    filterByFormula: formula,
+    fields: opts.fields,
+    pageSize: 100,
+  });
 }

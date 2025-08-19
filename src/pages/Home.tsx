@@ -15,21 +15,20 @@ import {
   Users,
   Clock,
   CheckCircle,
-  ArrowRight,
-  Star,
-  Target,
-  Zap,
-  Shield,
-  Award,
-  BookOpen,
-  FileText,
-  Heart,
-  Quote,
-  BookOpen,
-  Stethoscope,
-  TrendingUp,
-  Lightbulb,
-} from 'lucide-react';
+    ArrowRight,
+    Star,
+    Target,
+    Zap,
+    Shield,
+    Award,
+    BookOpen,
+    FileText,
+    Heart,
+    Quote,
+    Stethoscope,
+    TrendingUp,
+    Lightbulb,
+  } from 'lucide-react';
 import SafeText from '../components/common/SafeText';
 
 /**
@@ -146,7 +145,8 @@ export default function Home() {
       ],
     },
   ];
-
+  return (
+    <div className="bg-gray-50">
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-cyan-500 via-cyan-600 to-cyan-500 opacity-10"></div>
